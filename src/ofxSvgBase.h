@@ -5,8 +5,11 @@
 //
 
 #pragma once
-#include "ofMain.h"
+#include "ofNode.h"
+#include "ofImage.h"
+#include "ofPath.h"
 #include <map>
+#include "ofTrueTypeFont.h"
 
 class ofxSvgBase {
 public:
@@ -18,15 +21,16 @@ public:
         OFX_SVG_TYPE_CIRCLE,
         OFX_SVG_TYPE_PATH,
         OFX_SVG_TYPE_TEXT,
+        OFX_SVG_TYPE_ELEMENT,
         OFX_SVG_TYPE_TOTAL
     };
     
     ofxSvgBase() { name = "No Name"; type = OFX_SVG_TYPE_TOTAL; setVisible( true ); }
     
     int getType() {return type;}
-    string getTypeAsString();
+    std::string getTypeAsString();
     
-    string getName() { return name; }
+	std::string getName() { return name; }
     virtual int getNumChildren() { return 0; }
     bool isGroup() {
         return (getType() == OFX_SVG_TYPE_GROUP);
@@ -35,27 +39,38 @@ public:
     void setVisible( bool ab ) { bVisible = ab; }
     bool isVisible() { return bVisible; }
     
+    virtual void setUseShapeColor( bool ab ) {
+        bUseShapeColor = ab;
+    }
+    
     virtual void draw() {}
     
-    virtual string toString(int nlevel = 0);
+    virtual std::string toString(int nlevel = 0);
     
-    string name;
-    int type;
-    bool bVisible;
+    virtual glm::mat4 getTransformMatrix();
+    virtual ofNode getNodeTransform();
+    
+	std::string name = "";
+    int type=0;
+    bool bVisible=true;
     ofVec2f pos;
+    bool bUseShapeColor = true;
 };
 
 class ofxSvgElement : public ofxSvgBase {
 public:
     
-    ofxSvgElement() {scale.set(1,1); rotation = 0.0;}
+    ofxSvgElement() {scale.set(1,1); rotation = 0.0; type=OFX_SVG_TYPE_ELEMENT;}
     
-    ofVec2f scale;
-    float rotation;
+    ofVec2f scale = ofVec2f(1.0f, 1.0f);
+    float rotation = 0.0f;
+    
+    virtual glm::mat4 getTransformMatrix() override;
+    virtual ofNode getNodeTransform() override;
     
     ofPath path;
     
-    virtual void draw() {
+    virtual void draw() override {
         if(isVisible()) path.draw();
     }
     
@@ -64,6 +79,11 @@ public:
     float getStrokeWidth() { return path.getStrokeWidth(); }
     ofColor getFillColor() { return path.getFillColor(); }
     ofColor getStrokeColor() { return path.getStrokeColor(); }
+    
+    void setUseShapeColor( bool ab ) override {
+        ofxSvgBase::setUseShapeColor(ab);
+        path.setUseShapeColor(ab);
+    }
 };
 
 class ofxSvgRectangle : public ofxSvgElement {
@@ -82,26 +102,9 @@ class ofxSvgImage : public ofxSvgRectangle {
 public:
     ofxSvgImage() { type = OFX_SVG_TYPE_IMAGE; bTryLoad = false; }
     
-    virtual void draw() {
-        if( !bTryLoad ) {
-            img.load( getFilePath() );
-            bTryLoad = true;
-        }
-        
-        if( isVisible() ) {
-            if( img.isAllocated() ) {
-                ofPushMatrix(); {
-                    ofTranslate( pos.x, pos.y );
-                    if( rotation != 0.0 ) ofRotateZDeg( rotation );
-                    ofScale( scale.x, scale.y );
-                    ofSetColor( getColor() );
-                    img.draw( 0, 0 );
-                } ofPopMatrix();
-            }
-        }
-    }
+	virtual void draw();
     
-    string getFilePath() { return filepath; }
+	std::string getFilePath() { return filepath; }
     
     void setColor( ofColor aColor ) {
         color = aColor;
@@ -112,8 +115,8 @@ public:
     
     ofColor color;
     ofImage img;
-    bool bTryLoad;
-    string filepath;
+    bool bTryLoad = false;
+	std::string filepath;
 };
 
 class ofxSvgCircle : public ofxSvgElement {
@@ -122,14 +125,14 @@ public:
     
     float getRadius() {return radius;}
     
-    float radius;
+    float radius = 10.0;
 };
 
 class ofxSvgEllipse : public ofxSvgElement {
 public:
     ofxSvgEllipse() { type = OFX_SVG_TYPE_ELLIPSE; }
     
-    float radiusX, radiusY;
+    float radiusX, radiusY = 10.0;
 };
 
 class ofxSvgPath : public ofxSvgElement {
@@ -143,12 +146,12 @@ public:
     
     class Font {
     public:
-        string fontFamily;
-        map< int, ofTrueTypeFont > sizes;
-        map< int, ofTexture > textures;
+		std::string fontFamily;
+		std::map< int, ofTrueTypeFont > sizes;
+		std::map< int, ofTexture > textures;
     };
     
-    static map< string, Font > fonts;
+    static std::map< std::string, Font > fonts;
     
     class TextSpan {
     public:
@@ -158,12 +161,12 @@ public:
             lineHeight = 0;
         }
         
-        string text;
-        int fontSize;
-        string fontFamily;
+		std::string text;
+        int fontSize = 12;
+		std::string fontFamily;
         ofRectangle rect;
         ofColor color;
-        float lineHeight;
+        float lineHeight = 12;
         ofTrueTypeFont& getFont();
     };
     
@@ -180,7 +183,7 @@ public:
     void create();
     void draw();
     
-    void setFontDirectory( string aPath ) {
+    void setFontDirectory( std::string aPath ) {
         fdirectory = aPath;
 //		cout << "Setting the font directory to " << fdirectory << endl;
     }
@@ -192,17 +195,17 @@ public:
     
     ofRectangle getRectangle();
     
-    map< string, map<int, ofMesh> > meshes;
-    vector< TextSpan > textSpans;
+	std::map< std::string, std::map<int, ofMesh> > meshes;
+	std::vector< TextSpan > textSpans;
     
-    string fdirectory;
-    bool bCentered;
-    float alpha;
+	std::string fdirectory;
+    bool bCentered = false;
+    float alpha = 1.;
     ofVec2f ogPos;
     
 protected:
     static ofTrueTypeFont defaultFont;
-	bool _recursiveFontDirSearch(string afile, string aFontFamToLookFor, string& fontpath);
+	bool _recursiveFontDirSearch(std::string afile, std::string aFontFamToLookFor, std::string& fontpath);
     ofFloatColor _overrideColor;
     bool bOverrideColor;
 };

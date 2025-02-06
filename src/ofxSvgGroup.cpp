@@ -5,6 +5,11 @@
 //
 
 #include "ofxSvgGroup.h"
+#include "ofGraphics.h"
+
+using std::vector;
+using std::shared_ptr;
+using std::string;
 
 //--------------------------------------------------------------
 void ofxSvgGroup::draw() {
@@ -44,7 +49,7 @@ void ofxSvgGroup::_getAllElementsRecursive( vector< shared_ptr< ofxSvgBase > >& 
     
     if( aele ) {
         if( aele->isGroup() ) {
-            shared_ptr< ofxSvgGroup > tgroup = dynamic_pointer_cast< ofxSvgGroup >(aele);
+            shared_ptr< ofxSvgGroup > tgroup = std::dynamic_pointer_cast< ofxSvgGroup >(aele);
             for( auto ele : tgroup->getElements() ) {
                 _getAllElementsRecursive( aElesToReturn, ele );
             }
@@ -90,7 +95,7 @@ void ofxSvgGroup::getElementForNameRecursive( vector< string >& aNamesToFind, sh
                 if (aElements[i]->getName() == "No Name") {
                     // the ids for text block in illustrator are weird,
                     // so try to grab the name from the text contents //
-                    shared_ptr<ofxSvgText> etext = dynamic_pointer_cast<ofxSvgText>(aElements[i]);
+                    shared_ptr<ofxSvgText> etext = std::dynamic_pointer_cast<ofxSvgText>(aElements[i]);
                     if (etext) {
                         if (etext->textSpans.size()) {
 //                            cout << "Searching for " << aNamesToFind[0] << " in " << etext->textSpans.front().text << endl;
@@ -116,15 +121,39 @@ void ofxSvgGroup::getElementForNameRecursive( vector< string >& aNamesToFind, sh
                 break;
             } else {
                 if( aElements[i]->getType() == OFX_SVG_TYPE_GROUP ) {
-                    shared_ptr< ofxSvgGroup > tgroup = dynamic_pointer_cast< ofxSvgGroup >( aElements[i] );
+                    shared_ptr< ofxSvgGroup > tgroup = std::dynamic_pointer_cast< ofxSvgGroup >( aElements[i] );
                     getElementForNameRecursive( aNamesToFind, aTarget, tgroup->elements, bStrict );
                     break;
                 }
             }
         }
     }
-    
-    
+}
+
+//--------------------------------------------------------------
+bool ofxSvgGroup::replace( shared_ptr<ofxSvgBase> aOriginal, shared_ptr<ofxSvgBase> aNew ) {
+    bool bReplaced = false;
+    _replaceElementRecursive( aOriginal, aNew, elements, bReplaced );
+    return bReplaced;
+}
+
+//--------------------------------------------------------------
+void ofxSvgGroup::_replaceElementRecursive( shared_ptr< ofxSvgBase > aTarget, shared_ptr< ofxSvgBase > aNew, vector< shared_ptr<ofxSvgBase> >& aElements, bool& aBSuccessful ) {
+    for( int i = 0; i < aElements.size(); i++ ) {
+        bool bFound = false;
+        if( aTarget == aElements[i] ) {
+            bFound = true;
+            aBSuccessful = true;
+            aElements[i] = aNew;
+            break;
+        }
+        if( !bFound ) {
+            if( aElements[i]->getType() == OFX_SVG_TYPE_GROUP ) {
+                auto tgroup = std::dynamic_pointer_cast< ofxSvgGroup >( aElements[i] );
+                _replaceElementRecursive(aTarget, aNew, tgroup->elements, aBSuccessful );
+            }
+        }
+    }
 }
 
 //--------------------------------------------------------------
@@ -148,6 +177,22 @@ string ofxSvgGroup::toString(int nlevel ) {
 //--------------------------------------------------------------
 int ofxSvgGroup::getNumChildren() {
     return (int)elements.size();
+}
+
+//--------------------------------------------------------------
+void ofxSvgGroup::disableColors() {
+    auto telements = getAllElements();
+    for( auto& ele : telements ) {
+        ele->setUseShapeColor(false);
+    }
+}
+
+//--------------------------------------------------------------
+void ofxSvgGroup::enableColors() {
+    auto telements = getAllElements();
+    for( auto& ele : telements ) {
+        ele->setUseShapeColor(true);
+    }
 }
 
 

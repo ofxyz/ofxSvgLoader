@@ -9,6 +9,11 @@ extern "C"{
 #include "svgtiny.h"
 }
 
+using std::string;
+using std::vector;
+using std::make_shared;
+using std::shared_ptr;
+
 //--------------------------------------------------------------
 ofxSvgLoader::ofxSvgLoader() {
     svgPath     = "";
@@ -33,8 +38,6 @@ bool ofxSvgLoader::load( string aPathToSvg ) {
     
     
     if( xml ) {
-//        Poco::XML::Element *svgNode     = document->documentElement();
-//        Poco::XML::Attr* viewBoxNode = svgNode->getAttributeNode("viewbox");
         
         ofXml svgNode = xml.getFirstChild();
         
@@ -112,48 +115,64 @@ string ofxSvgLoader::toString(int nlevel) {
     return tstr;
 }
 
+static bool ofStringEndsWith(const std::string &str, const std::string &suffix)
+{
+	return str.size() >= suffix.size() && 0 == str.compare(str.size() - suffix.size(), suffix.size(), suffix);
+}
+
 //--------------------------------------------------------------
 void ofxSvgLoader::validateXmlSvgRoot( ofXml& aRootSvgNode ) {
-    // if there is no width and height set in the svg base node, svg tiny no likey //
-    if(aRootSvgNode) {
-        // check for x, y, width and height //
-        {
-            auto xattr = aRootSvgNode.getAttribute("x");
-            if( !xattr ) {
-                auto nxattr = aRootSvgNode.appendAttribute("x");
-                if(nxattr) nxattr.set("0px");
-            }
-        }
-        {
-            auto yattr = aRootSvgNode.getAttribute("y");
-            if( !yattr ) {
-                auto yattr = aRootSvgNode.appendAttribute("y");
-                if( yattr ) yattr.set("0px");
-            }
-        }
-        
-        auto wattr = aRootSvgNode.getAttribute("width");
-        auto hattr = aRootSvgNode.getAttribute("height");
-        
-        if( !wattr || !hattr ) {
-            ofXml::Attribute viewBoxAttr = aRootSvgNode.getAttribute("viewBox");
-            if( viewBoxAttr ) {
-                string tboxstr = viewBoxAttr.getValue();
-                vector< string > tvals = ofSplitString( tboxstr, " " );
-                if( tvals.size() >= 4 ) {
-                    if( !wattr ) {
-                        auto nwattr = aRootSvgNode.appendAttribute("width");
-                        if(nwattr) nwattr.set( ofToString(tvals[2])+"px" );
-                    }
-                    
-                    if( !hattr ) {
-                        auto nhattr = aRootSvgNode.appendAttribute("height");
-                        if(nhattr) nhattr.set( ofToString(tvals[3])+"px" );
-                    }
-                }
-            }
-        }
-    }
+	// if there is no width and height set in the svg base node, svg tiny no likey //
+	if(aRootSvgNode) {
+		// check for x, y, width and height //
+		{
+			auto xattr = aRootSvgNode.getAttribute("x");
+			if( !xattr ) {
+				auto nxattr = aRootSvgNode.appendAttribute("x");
+				if(nxattr) nxattr.set("0px");
+			}
+		}
+		{
+			auto yattr = aRootSvgNode.getAttribute("y");
+			if( !yattr ) {
+				auto yattr = aRootSvgNode.appendAttribute("y");
+				if( yattr ) yattr.set("0px");
+			}
+		}
+		
+		auto wattr = aRootSvgNode.getAttribute("width");
+		auto hattr = aRootSvgNode.getAttribute("height");
+		
+		//std::optional<glm::vec2> restore_to_viewbox;
+		bool bRestoreToViewbox = false;
+		glm::vec2 restore_to_viewbox = {1.f, 1.f};
+		if( !wattr || !hattr ) {
+			bRestoreToViewbox = true;
+			restore_to_viewbox = { 1.0f, 1.0f }; // missing width/height — apply viewbox at 100%
+		} else if (ofStringEndsWith(wattr.getValue(),"%") || ofStringEndsWith(wattr.getValue(),"%")) {
+			bRestoreToViewbox = true;
+			restore_to_viewbox = { wattr.getFloatValue()/100.0, hattr.getFloatValue()/100.0 };
+		}
+		
+		if (bRestoreToViewbox) {
+			ofXml::Attribute viewBoxAttr = aRootSvgNode.getAttribute("viewBox");
+			if( viewBoxAttr ) {
+				string tboxstr = viewBoxAttr.getValue();
+				vector<string> tvals = ofSplitString(tboxstr, " ");
+				
+				if (tvals.size() >= 4) {
+					
+					if (!wattr) wattr = aRootSvgNode.appendAttribute("width");
+					if (wattr) wattr.set(ofToString(ofToFloat(tvals[2]) * restore_to_viewbox.x) + "px");
+					
+					if (!hattr) hattr = aRootSvgNode.appendAttribute("height");
+					if (hattr) hattr.set(ofToString(ofToFloat(tvals[3]) * restore_to_viewbox.y) + "px");
+				}
+			} else {
+				ofLogError("ofxSvgLoader::validateXmlSvgRoot") << "strangely-formed SVG without absolute width/height nor viewbox";
+			}
+		}
+	}
 }
 
 //--------------------------------------------------------------
@@ -330,14 +349,14 @@ bool ofxSvgLoader::addElementFromXmlNode( ofXml& aRootNode, ofXml& tnode, vector
             getTransformFromSvgMatrix( transAttr.getValue(), telement->pos, telement->scale.x, telement->scale.y, telement->rotation );
         }
         if( telement->getType() == ofxSvgBase::OFX_SVG_TYPE_IMAGE ) {
-            shared_ptr< ofxSvgImage > timg = dynamic_pointer_cast<ofxSvgImage>( telement );
+            shared_ptr< ofxSvgImage > timg = std::dynamic_pointer_cast<ofxSvgImage>( telement );
             timg->rectangle.x = timg->pos.x;
             timg->rectangle.y = timg->pos.y;
         }
     }
     
     if( telement->getType() == ofxSvgBase::OFX_SVG_TYPE_TEXT ) {
-        shared_ptr< ofxSvgText > text = dynamic_pointer_cast< ofxSvgText>( telement );
+        shared_ptr< ofxSvgText > text = std::dynamic_pointer_cast< ofxSvgText>( telement );
         text->ogPos = text->pos;
         text->create();
     }
@@ -581,4 +600,14 @@ const ofRectangle ofxSvgLoader::getBounds(){
 //--------------------------------------------------------------
 const ofRectangle ofxSvgLoader::getViewbox(){
 	return viewbox;
+}
+
+//--------------------------------------------------------------
+float ofxSvgLoader::getWidth() {
+	return viewbox.getWidth();
+}
+
+//--------------------------------------------------------------
+float ofxSvgLoader::getHeight() {
+	return viewbox.getHeight();
 }
